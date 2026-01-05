@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MedAssist Chat</title>
+
+  <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=901"/>
+</head>
+
+<body>
+  <div class="bg">
+    <div class="glow g1"></div>
+    <div class="glow g2"></div>
+    <div class="glow g3"></div>
+  </div>
+
+  <div class="frame">
+    <div class="card">
+
+      <!-- Header -->
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">
+            <span class="plus-v"></span>
+            <span class="plus-h"></span>
+          </div>
+          <div class="brand-text">
+            <div class="brand-title">MedAssist</div>
+            <div class="brand-sub">Symptoms • Exams • Radiology • Protocols</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="icon-btn" id="clearChatBtn" title="Clear chat" type="button">
+            <i class="fas fa-broom"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages (scroll area) -->
+      <main id="chatBody" class="messages" aria-live="polite" aria-relevant="additions">
+        <div class="row bot">
+          <div class="bubble bot-bubble">
+            <div class="bubble-title">Welcome 👋</div>
+            <div class="bubble-text">
+              Share a case (age, symptoms, vitals, labs/imaging). I’ll respond with
+              <b>triage → DDx → workup → management</b>.
+            </div>
+            <div class="meta"><span class="js-time">--:--</span></div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Composer -->
+      <footer class="composer-wrap">
+        <form id="messageArea" class="composer">
+          <textarea
+            id="text"
+            name="msg"
+            class="input"
+            placeholder="Type your message… (Enter to send • Shift+Enter new line)"
+            rows="1"
+            required
+          ></textarea>
+
+          <button type="submit" class="send" aria-label="Send">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </form>
+
+        <div class="hint">
+          <i class="fas fa-shield-alt"></i>
+          Not medical advice • If emergency, call local services
+        </div>
+      </footer>
+
+    </div>
+  </div>
+
+  <script>
+    function pad(n){ return n < 10 ? "0"+n : n; }
+    function nowTime(){
+      const d = new Date();
+      return pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+    $(".js-time").text(nowTime());
+
+    function escapeHtml(str){ return $("<div/>").text(str).html(); }
+
+    function scrollBottom(){
+      const el = document.getElementById("chatBody");
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function autosize(ta){
+      ta.style.height = "auto";
+      ta.style.height = Math.min(160, ta.scrollHeight) + "px";
+    }
+
+    $("#text").on("input", function(){ autosize(this); });
+
+    $("#text").on("keydown", function(e){
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        $("#messageArea").submit();
+      }
+    });
+
+    $("#clearChatBtn").on("click", function(){
+      $("#chatBody").html("");
+      scrollBottom();
+    });
+
+    function typingRow(){
+      return `
+        <div class="row bot" id="typingRow">
+          <div class="bubble bot-bubble typing">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          </div>
+        </div>
+      `;
+    }
+
+    $(document).ready(function(){
+      setTimeout(scrollBottom, 0);
+
+      $("#messageArea").on("submit", function(e){
+        e.preventDefault();
+
+        const raw = $("#text").val().trim();
+        if(!raw) return;
+
+        const t = nowTime();
+        const safe = escapeHtml(raw).replace(/\n/g,"<br>");
+
+        $("#chatBody").append(`
+          <div class="row user">
+            <div class="bubble user-bubble">
+              <div class="bubble-text">${safe}</div>
+              <div class="meta">${t}</div>
+            </div>
+          </div>
+        `);
+
+        $("#text").val("");
+        autosize(document.getElementById("text"));
+        setTimeout(scrollBottom, 0);
+
+        $("#chatBody").append(typingRow());
+        setTimeout(scrollBottom, 0);
+
+        $.ajax({
+          data: { msg: raw },
+          type: "POST",
+          url: "/get"
+        }).done(function(data){
+          $("#typingRow").remove();
+
+          const bot = escapeHtml(data).replace(/\n/g,"<br>");
+          $("#chatBody").append(`
+            <div class="row bot">
+              <div class="bubble bot-bubble">
+                <div class="bubble-text">${bot}</div>
+                <div class="meta">${t}</div>
+              </div>
+            </div>
+          `);
+
+          setTimeout(scrollBottom, 0);
+        }).fail(function(){
+          $("#typingRow").remove();
+          $("#chatBody").append(`
+            <div class="row bot">
+              <div class="bubble bot-bubble">
+                <div class="bubble-text">⚠️ Server error. Please try again.</div>
+                <div class="meta">${t}</div>
+              </div>
+            </div>
+          `);
+          setTimeout(scrollBottom, 0);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
